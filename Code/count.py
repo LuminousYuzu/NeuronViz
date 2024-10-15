@@ -1,6 +1,14 @@
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+import os
+import pandas as pd
+from tkinter import Tk, filedialog, Scale, Button, Label, HORIZONTAL, StringVar, Entry
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from tkinter import ttk
+from tkinterdnd2 import DND_FILES, TkinterDnD
+from tkinter import PhotoImage
+from PIL import Image, ImageTk
 
 def load_image(image_path):
     """Load an image from the specified path."""
@@ -13,10 +21,9 @@ def convert_to_grayscale(image):
     """Convert an image to grayscale."""
     return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-def apply_thresholds(gray_image):
+def apply_thresholds(gray_image, manual_threshold_value):
     """Apply manual and Otsu's thresholding to the grayscale image."""
     # Manual Thresholding
-    manual_threshold_value = 50
     _, binary_manual = cv2.threshold(gray_image, manual_threshold_value, 255, cv2.THRESH_BINARY)
     
     # Otsu's Thresholding
@@ -94,30 +101,110 @@ def display_results(image, binary_manual, contoured_manual, count_manual,
     plt.tight_layout()
     plt.show()
 
+def process_images_in_folder(folder_path, manual_threshold_value):
+    """Process each image in the folder and return results."""
+    results = []
+    otsu_thresholds = []
+
+    for filename in os.listdir(folder_path):
+        if filename.endswith(('.jpg', '.jpeg', '.png')):
+            image_path = os.path.join(folder_path, filename)
+            image = load_image(image_path)
+            gray_image = convert_to_grayscale(image)
+            binary_manual, binary_otsu, otsu_threshold_value = apply_thresholds(gray_image, manual_threshold_value)
+            
+            # Define the contour area threshold
+            contour_area_threshold = 0  # Adjust this value as needed
+            
+            # Draw contours
+            _, count_manual = draw_contours(binary_manual, image, contour_area_threshold)
+            _, count_otsu = draw_contours(binary_otsu, image, contour_area_threshold)
+            
+            # Store results
+            results.append([image_path, count_manual, count_otsu])
+            otsu_thresholds.append(otsu_threshold_value)
+    
+    return results, otsu_thresholds
+
+def update_results(folder_path, manual_threshold_value, output_csv_path, canvas, ax):
+    """Update the results and plot based on the manual threshold value."""
+    results, otsu_thresholds = process_images_in_folder(folder_path, manual_threshold_value)
+    
+    # Save results to CSV
+    df = pd.DataFrame(results, columns=['Image Path', 'Manual Count', 'Otsu Count'])
+    df.to_csv(output_csv_path, index=False)
+    
+    # Update plot
+    ax.clear()
+    ax.hist(otsu_thresholds, bins=20, color='blue', alpha=0.7)
+    ax.set_title('Distribution of Otsu\'s Thresholds')
+    ax.set_xlabel('Otsu Threshold Value')
+    ax.set_ylabel('Frequency')
+    canvas.draw()
+
+def on_folder_drop(event, manual_threshold_slider, manual_threshold_var, canvas, ax):
+    """Handle folder drop event."""
+    folder_path = event.data.strip('{}')  # Remove curly braces if present
+    if os.path.isdir(folder_path):
+        output_csv_path = os.path.join(folder_path, 'results.csv')
+        update_results(folder_path, manual_threshold_slider.get(), output_csv_path, canvas, ax)
+
 def main():
-    image_path = '/Users/kyleliu/Desktop/Neuron Project/6.jpg'
+    # Create a TkinterDnD root window
+    root = TkinterDnD.Tk()
+    root.title("Image Analysis Dashboard")
     
-    # Load and process the image
-    image = load_image(image_path)
-    gray_image = convert_to_grayscale(image)
-    binary_manual, binary_otsu, otsu_threshold_value = apply_thresholds(gray_image)
+    # Create a frame for the controls
+    control_frame = ttk.Frame(root, padding="10")
+    control_frame.pack(side='top', fill='x')
     
-    # Define the contour area threshold
-    contour_area_threshold = 0  # Adjust this value as needed
+    # Commenting out the icon loading part
+    # script_dir = os.path.dirname(__file__)  # Directory of the script
+    # image_path = os.path.join(script_dir, 'NeuronViz', 'icon.webp')  # Construct the relative path
+    # image = Image.open(image_path)
+    # folder_icon = ImageTk.PhotoImage(image)
+
+    # Create a label without the icon
+    drag_label = Label(root, text="Drag your folder to start", compound='left', font=("Arial", 14))
+    drag_label.pack(pady=20)
     
-    # Draw contours
-    contoured_manual, count_manual = draw_contours(binary_manual, image, contour_area_threshold)
-    contoured_otsu, count_otsu = draw_contours(binary_otsu, image, contour_area_threshold)
+    # Create a matplotlib figure for the histogram
+    fig, ax = plt.subplots(figsize=(5, 4))
+    canvas = FigureCanvasTkAgg(fig, master=root)
+    canvas.get_tk_widget().pack(side='top', fill='both', expand=True)
     
-    # Compute histogram
-    hist = compute_histogram(gray_image, bins=31)
+    # Create a variable to hold the manual threshold value
+    manual_threshold_var = StringVar(value='50')
     
-    # Display results
-    display_results(image, binary_manual, contoured_manual, count_manual,
-                    binary_otsu, contoured_otsu, count_otsu, otsu_threshold_value, hist)
+    # Create a slider for manual threshold value
+    manual_threshold_slider = ttk.Scale(control_frame, from_=0, to=255, orient=HORIZONTAL,
+                                        command=lambda val: manual_threshold_var.set(f"{int(float(val))}"))
+    manual_threshold_slider.set(50)  # Default value
+    manual_threshold_slider.pack(side='left', padx=5, pady=5)
+    
+    # Create a label to display the slider value
+    slider_value_label = ttk.Label(control_frame, textvariable=manual_threshold_var)
+    slider_value_label.pack(side='left', padx=5, pady=5)
+    
+    # Create an entry box for manual threshold value
+    manual_threshold_entry = Entry(control_frame, textvariable=manual_threshold_var, width=5)
+    manual_threshold_entry.pack(side='left', padx=5, pady=5)
+    
+    # Create a button to update results
+    update_button = ttk.Button(control_frame, text="Update Results", command=lambda: update_results(
+        folder_path, int(manual_threshold_var.get()), output_csv_path, canvas, ax))
+    update_button.pack(side='left', padx=5, pady=5)
+    
+    # Bind the drop event to the root window
+    root.drop_target_register(DND_FILES)
+    root.dnd_bind('<<Drop>>', lambda event: on_folder_drop(event, manual_threshold_slider, manual_threshold_var, canvas, ax))
+    
+    # Run the Tkinter main loop
+    root.mainloop()
 
 if __name__ == "__main__":
     main()
+
 
 
 
