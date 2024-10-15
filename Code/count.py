@@ -144,16 +144,24 @@ def update_results(folder_path, manual_threshold_value, output_csv_path, canvas,
 
 def on_folder_drop(event, manual_threshold_slider, manual_threshold_var, canvas, ax):
     """Handle folder drop event."""
+    global folder_path, output_csv_path  # Declare as global to modify them
     folder_path = event.data.strip('{}')  # Remove curly braces if present
     if os.path.isdir(folder_path):
         output_csv_path = os.path.join(folder_path, 'results.csv')
         update_results(folder_path, manual_threshold_slider.get(), output_csv_path, canvas, ax)
+    else:
+        print("Invalid folder path")
 
 def main():
     # Create a TkinterDnD root window
     root = TkinterDnD.Tk()
     root.title("Image Analysis Dashboard")
     
+    # Declare folder_path and output_csv_path as global
+    global folder_path, output_csv_path
+    folder_path = None  # Initialize with None
+    output_csv_path = None  # Initialize with None
+
     # Create a frame for the controls
     control_frame = ttk.Frame(root, padding="10")
     control_frame.pack(side='top', fill='x')
@@ -192,7 +200,7 @@ def main():
     
     # Create a button to update results
     update_button = ttk.Button(control_frame, text="Update Results", command=lambda: update_results(
-        folder_path, int(manual_threshold_var.get()), output_csv_path, canvas, ax))
+        folder_path, int(manual_threshold_var.get()), output_csv_path, canvas, ax) if folder_path and output_csv_path else print("No folder selected"))
     update_button.pack(side='left', padx=5, pady=5)
     
     # Bind the drop event to the root window
