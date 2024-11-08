@@ -106,6 +106,10 @@ def process_images_in_folder(folder_path, manual_threshold_value):
     results = []
     otsu_thresholds = []
 
+    # Create a subfolder for storing contoured images
+    contoured_images_folder = os.path.join(folder_path, 'contoured_images')
+    os.makedirs(contoured_images_folder, exist_ok=True)
+
     for filename in os.listdir(folder_path):
         if filename.endswith(('.jpg', '.jpeg', '.png')):
             image_path = os.path.join(folder_path, filename)
@@ -117,8 +121,14 @@ def process_images_in_folder(folder_path, manual_threshold_value):
             contour_area_threshold = 0  # Adjust this value as needed
             
             # Draw contours
-            _, count_manual = draw_contours(binary_manual, image, contour_area_threshold)
-            _, count_otsu = draw_contours(binary_otsu, image, contour_area_threshold)
+            contoured_manual, count_manual = draw_contours(binary_manual, image, contour_area_threshold)
+            contoured_otsu, count_otsu = draw_contours(binary_otsu, image, contour_area_threshold)
+            
+            # Save contoured images
+            contoured_manual_path = os.path.join(contoured_images_folder, f'contoured_manual_{filename}')
+            contoured_otsu_path = os.path.join(contoured_images_folder, f'contoured_otsu_{filename}')
+            cv2.imwrite(contoured_manual_path, contoured_manual)
+            cv2.imwrite(contoured_otsu_path, contoured_otsu)
             
             # Store results
             results.append([image_path, count_manual, count_otsu])
